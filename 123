@@ -1,0 +1,44 @@
+import pandas as pd
+
+def process_cost_center_data(input_file, output_file):
+    # 엑셀 파일 읽기
+    data = pd.read_excel(input_file, header=0)  # 첫 번째 행을 헤더로 읽기
+
+    # 열 이름 재정의
+    data.columns = [
+        "구분", 
+        "연간예산(A)", 
+        "배정예산(B)", 
+        "약정(C)", 
+        "집행(D)", 
+        "D/B(%)", 
+        "D/A(%)"
+    ]
+
+    # 코스트센터와 비용항목 구분
+    data["코스트센터"] = data["구분"].str.extract(r'(\d{7})')
+    data["비용항목"] = data["구분"].str.extract(r'(\d{6})')
+    data["코스트센터"] = data["코스트센터"].ffill()
+
+    # 코스트센터별 데이터 그룹화
+    with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
+        # 요약 시트 생성
+        summary = data.groupby("코스트센터").agg({
+            "연간예산(A)": "sum",
+            "배정예산(B)": "sum",
+            "약정(C)": "sum",
+            "집행(D)": "sum"
+        })
+        summary["D/B(%)"] = (summary["집행(D)"] / summary["배정예산(B)"] * 100).fillna(0)
+        summary["D/A(%)"] = (summary["집행(D)"] / summary["연간예산(A)"] * 100).fillna(0)
+        summary.to_excel(writer, sheet_name="요약", index=True)
+
+        # 코스트센터별 시트 생성
+        for cost_center, group in data.groupby("코스트센터"):
+            group.drop(columns="코스트센터", inplace=True)
+            group.to_excel(writer, sheet_name=str(cost_center), index=False)
+
+# 실행 예제
+input_file = "Original cost.xlsx"  # 입력 파일 이름
+output_file = "processed_cost_center.xlsx"  # 출력 파일 이름
+process_cost_center_data(input_file, output_file)
